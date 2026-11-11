@@ -68,6 +68,8 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .facet .count{font-family:var(--body);font-variant-numeric:tabular-nums;font-size:11px;color:var(--muted)}
 .card .patchline{font-family:var(--pixel);font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.05em}
 .bakednote{max-width:1700px;margin:14px auto 0;padding:10px 14px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--fg);font-size:13px;margin-left:max(16px,env(safe-area-inset-left,0px));margin-right:max(16px,env(safe-area-inset-right,0px))}
+.suggest{border:1px solid var(--accent);background:var(--accent-soft);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.suggest .changes{margin:0;padding-left:18px;font-size:13px;columns:2;column-gap:24px}
 .facet .dot{width:9px;height:9px;border-radius:50%;background:var(--t);display:inline-block;margin-right:7px}
 .types-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px}
 .types-grid button{padding:5px 7px;font-size:12px}
@@ -271,7 +273,7 @@ dialog::backdrop{background:#020610b3}
  </div>
 </header>
 
-<div class="bakednote" id="bakedNote" hidden><b>Read-only copy for the team.</b> To suggest an idea, open a character and press <b>✎ Design a version</b> (or <b>✎ Design a character</b> at the top), then <b>⬇ Download as text file</b> and attach that file to a GitHub issue. The owner loads it straight into the Character Atlas.</div>
+<div class="bakednote" id="bakedNote" hidden><b>Read-only copy for the team.</b> To suggest a change, open a character and press <b>✎ Suggest edits</b> (change the version you are looking at) or <b>✎ Suggest a new version</b> (an alternative). For a brand-new character use <b>✎ Design a character</b> at the top. Say what you changed in the note box, press <b>⬇ Download as text file</b>, and attach that file to a GitHub issue. The owner loads it straight into the Character Atlas.</div>
 <main class="page" id="charsPage">
  <aside class="rail" aria-label="Filters">
   <div><h3>Show</h3><div class="facet" id="favFacet"></div></div>
@@ -654,7 +656,7 @@ function redrawDetail() {
      ${ed ? `<button class="icon-btn ${c.fav ? 'on' : ''}" data-fav="${OPEN.id}" aria-label="Favorite">${c.fav ? '★' : '☆'}</button>` : ''}
      <button class="icon-btn" data-close="detail" aria-label="Close">×</button></div></div>
    <div class="dlg-body">
-    <div class="toolbar">${ed ? `<button class="button primary" data-action="edit">✎ Edit${vers.length > 1 ? ' V' + (shown + 1) : ''}</button>` : `<button class="button" data-action="designfrom">✎ Design a version</button>`}
+    <div class="toolbar">${ed ? `<button class="button primary" data-action="edit">✎ Edit${vers.length > 1 ? ' V' + (shown + 1) : ''}</button>` : `<button class="button primary" data-action="suggestedit">✎ Suggest edits to V${shown + 1}</button><button class="button" data-action="designfrom">✎ Suggest a new version</button>`}
       <button class="button" data-action="sendtxt">⬇ Download as text file</button>
       <button class="button" data-cmp="${OPEN.id}">${UI.compare.includes(OPEN.id) ? '✓ In compare' : '⇄ Compare'}</button>
       ${ed && UNDO.length ? `<button class="button quiet" data-action="undo">↶ Undo last change</button>` : ''}
@@ -757,13 +759,19 @@ function drawMoveEditor() {
 function drawEditor() {
   if (ED.patch === undefined) ED.patch = CHARS[ED.id]?.patch ?? (ED.target ? CHARS[ED.target]?.patch : undefined) ?? UI.patch ?? '';
   if (ED.mode === 'move') { drawMoveEditor(); return; }
-  const d = ED.d, title = { new: 'New character', edit: `Edit ${esc(d.name || 'character')}${ED.verCount > 1 ? ' · V' + (ED.ver + 1) : ''}`, newver: `New version of ${esc(d.name)} (V${ED.ver + 1})`, draft: ED.loaded && STORE.editable ? 'Check a loaded design' : 'Design a character' }[ED.mode];
+  const d = ED.d, title = { new: 'New character', edit: `Edit ${esc(d.name || 'character')}${ED.verCount > 1 ? ' · V' + (ED.ver + 1) : ''}`, newver: `New version of ${esc(d.name)} (V${ED.ver + 1})`, draft: ED.loaded && STORE.editable ? (ED.target ? `Check a suggestion for ${esc(CHARS[ED.target]?.name || d.name)}` : 'Check a loaded design') : ED.kind === 'edit' ? `Suggest edits to ${esc(d.name)} V${(ED.baseVer ?? 0) + 1}` : ED.kind === 'newver' ? `Suggest a new version of ${esc(d.name)}` : 'Design a character' }[ED.mode];
   const used = new Set(d.stats.map(s => s.n));
   const addStat = `<select class="field" id="addStat" aria-label="Add a stat"><option value="">+ Add stat</option>${STAT_GROUPS.map(([g, list]) => `<optgroup label="${g}">${list.filter(s => !used.has(s)).map(s => `<option>${s}</option>`).join('')}</optgroup>`).join('')}<optgroup label="Other"><option value="__custom">Custom stat…</option></optgroup></select>`;
   const artNote = STORE.assets ? `<button class="button small" type="button" data-action="upload">Upload a picture</button>${d.art.asset ? ` <button class="button small quiet" type="button" data-action="clearart">Use the SpriteCollab portrait</button>` : ''}<input type="file" id="artFile" accept="image/*" hidden>` : '<span class="hint">Card art comes from the Pokémon you pick.</span>';
-  const targetSel = ED.mode === 'draft' && STORE.editable && ED.target ? `<label class="hint"><input type="checkbox" id="asVersion" ${ED.asVersion ? 'checked' : ''}> Save as a new version of ${esc(CHARS[ED.target]?.name || 'the character')}</label>` : '';
+  const tc = ED.target && CHARS[ED.target], baseOk = tc && ED.baseVer != null && ED.baseVer < verList(tc).length;
+  if (ED.mode === 'draft' && STORE.editable && tc && !ED.saveAs) ED.saveAs = ED.kind === 'edit' && baseOk ? 'edit' : 'newver';
+  const targetSel = ED.mode === 'draft' && STORE.editable && tc ? `<div class="f" style="flex:0 1 330px"><label for="saveAs">Save as</label><select class="field" id="saveAs">${baseOk ? `<option value="edit" ${ED.saveAs === 'edit' ? 'selected' : ''}>Apply to V${ED.baseVer + 1} (replaces it)</option>` : ''}<option value="newver" ${ED.saveAs === 'newver' ? 'selected' : ''}>A new version of ${esc(tc.name)}</option><option value="new" ${ED.saveAs === 'new' ? 'selected' : ''}>A new character</option></select></div>` : '';
+  const sugg = ED.mode !== 'draft' ? '' : `<div class="suggest">
+    ${ED.loaded && STORE.editable ? `<div><b>${ED.kind === 'edit' ? `Suggested edits to ${esc(tc?.name || d.name)} V${(ED.baseVer ?? 0) + 1}` : ED.kind === 'newver' ? `Suggested new version of ${esc(tc?.name || d.name)}` : 'Loaded design'}${ED.by ? ` · from ${esc(ED.by)}` : ''}</b></div>
+      ${ED.changes ? (ED.changes.length ? `<div class="hint">Changes compared with ${esc(tc?.name || '')} V${(ED.baseVer ?? useIdx(tc)) + 1}:</div><ul class="changes">${ED.changes.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<div class="hint">No differences from the current version.</div>') : ''}` : ''}
+    <div class="f"><label for="eNote">${STORE.editable && ED.loaded ? 'Their note' : 'What did you change, and why?'}</label><textarea class="field" id="eNote" rows="2" placeholder="e.g. Ice Ball felt too slow: lowered the cooldown and added a slow on hit.">${esc(ED.note || '')}</textarea></div></div>`;
   $('editorContent').innerHTML = `<div class="dlg-head"><div><div class="eyebrow">${ED.mode === 'draft' && !STORE.editable ? 'Your design · download it and send it to the owner' : 'Character editor'}</div><h2>${title}</h2></div><button class="icon-btn" data-close="editor" aria-label="Close editor">×</button></div>
-  <div class="dlg-body"><div class="ed">
+  <div class="dlg-body">${sugg}<div class="ed">
    <div class="col">
     <div class="f"><label for="ePatch">Patch</label><input class="field" id="ePatch" list="patchList" value="${esc(ED.patch ?? '')}" placeholder="e.g. First Patch" maxlength="40"></div>
     <div class="f"><label for="eName">Character name</label><input class="field" id="eName" value="${esc(d.name)}" placeholder="e.g. Charizard" maxlength="80"></div>
@@ -821,7 +829,7 @@ function readEditor() {
     box.querySelectorAll('[data-fx]').forEach(r => { const f = m.fx[+r.dataset.fx]; if (!f) return; r.querySelectorAll('[data-k]').forEach(i => { f[i.dataset.k] = i.value; }); });
     m.open = box.open;
   });
-  ED.asVersion = $('asVersion')?.checked;
+  ED.asVersion = $('asVersion')?.checked; if ($('saveAs')) ED.saveAs = $('saveAs').value; if ($('eNote')) ED.note = $('eNote').value;
 }
 function redrawEditorKeep(fn) { readEditor(); const y = $('editor').scrollTop; fn(); drawEditor(); $('editor').scrollTop = y; }
 function editorCore() { readEditor(); return cleanCore(ED.d); }
@@ -833,8 +841,9 @@ async function saveEditor() {
   const by = txt(ED.by), at = new Date().toISOString();
   let id = ED.id, doc, msg;
   const moveMode = ED.mode === 'move', moveNames = moveMode ? core.kit.filter(m => ED.show.includes(m.id)).map(m => m.name || 'Move').join(' and ') : '';
-  const mode = ED.mode === 'draft' ? (ED.asVersion && ED.target && CHARS[ED.target] ? 'newver' : 'new') : moveMode ? 'edit' : ED.mode;
-  if (ED.mode === 'draft' && mode === 'newver') id = ED.target;
+  let mode = ED.mode === 'draft' ? (ED.target && CHARS[ED.target] ? (ED.saveAs === 'new' ? 'new' : ED.saveAs === 'edit' ? 'edit' : 'newver') : 'new') : moveMode ? 'edit' : ED.mode;
+  if (ED.mode === 'draft' && mode !== 'new') id = ED.target;
+  if (ED.mode === 'draft' && mode === 'edit') { if (ED.baseVer != null && ED.baseVer < verList(CHARS[id]).length) ED.ver = ED.baseVer; else mode = 'newver'; }
   if (mode === 'new') {
     id = newId(); doc = buildDoc([{ by, at, d: core }], 0, { patch: ED.patch }); msg = `${core.name} added.`;
   } else {
@@ -867,6 +876,9 @@ function designText(core, info) {
   if (info.id) L.push(`Character ID: ${info.id}`);
   if (info.patch) L.push(`Patch: ${enc(info.patch)}`);
   if (info.ver != null) L.push(`Based on version: V${info.ver + 1}`);
+  if (info.kind === 'edit' && info.ver != null) L.push(`Suggestion: Edits to V${info.ver + 1}`);
+  else if (info.kind === 'newver') L.push(`Suggestion: New version`);
+  if (info.note) L.push(`Change note: ${enc(info.note)}`);
   L.push('');
   L.push(`Name: ${enc(core.name)}`);
   L.push(`Pokemon: ${core.dex ? spLabel(core.dex) : ''}`);
@@ -885,7 +897,7 @@ function designText(core, info) {
   for (const s of core.stats) L.push(`- ${enc(s.n)}: ${s.b ?? ''} / ${s.g ?? ''}`);
   core.kit.forEach((m, i) => {
     L.push(''); L.push(`MOVE ${i + 1}`);
-    L.push(`Slot: ${m.slot}`); L.push(`Moveset: ${m.sets === 'AB' ? 'A+B' : m.sets}`); L.push(`Name: ${enc(m.name)}`); L.push(`Learned at: ${enc(m.at)}`);
+    L.push(`Move ID: ${m.id}`); L.push(`Slot: ${m.slot}`); L.push(`Moveset: ${m.sets === 'AB' ? 'A+B' : m.sets}`); L.push(`Name: ${enc(m.name)}`); L.push(`Learned at: ${enc(m.at)}`);
     L.push(`Type: ${m.type}`); L.push(`Category: ${m.cat}`);
     L.push(`Base damage: ${m.dmg.b ?? ''}`); L.push(`Damage per rank: ${m.dmg.r ?? ''}`);
     L.push(`Scaling: ${has(m.dmg.s) ? m.dmg.s + '% ' + (m.dmg.st || '') : ''}`.trimEnd());
@@ -914,7 +926,8 @@ function parseDesign(text) {
     const kv = line.match(/^([^:]+):\s?(.*)$/); if (!kv) continue;
     const k = kv[1].trim().toLowerCase(), v = kv[2].trim();
     if (sec === 'move' && mv) {
-      if (k === 'moveset') mv.sets = /a\s*\+\s*b|both/i.test(v) ? 'AB' : (v.trim().toUpperCase() === 'B' ? 'B' : v.trim().toUpperCase() === 'A' ? 'A' : 'AB');
+      if (k === 'move id') mv.id = v.replace(/[^\w-]/g, '').slice(0, 24) || undefined;
+      else if (k === 'moveset') mv.sets = /a\s*\+\s*b|both/i.test(v) ? 'AB' : (v.trim().toUpperCase() === 'B' ? 'B' : v.trim().toUpperCase() === 'A' ? 'A' : 'AB');
       else if (k === 'slot') mv.slot = findIn(SLOTS, v); else if (k === 'name') mv.name = dec(v); else if (k === 'learned at') mv.at = dec(v);
       else if (k === 'type') mv.type = findIn(TYPES.map(t => t[0]), v); else if (k === 'category') mv.cat = findIn(CATS, v);
       else if (k === 'base damage') mv.dmg.b = numOrNull(v); else if (k === 'damage per rank') mv.dmg.r = numOrNull(v);
@@ -927,7 +940,7 @@ function parseDesign(text) {
       continue;
     }
     if (k === 'class') d.cls = dec(v); else if (k === 'status') d.status = dec(v); else if (k === 'tagline') d.tagline = dec(v); else if (k === 'note box') (d.notes = d.notes || []).push({ title: dec(v), text: '' }); else if (k === 'note text' && d.notes?.length) d.notes[d.notes.length - 1].text = dec(v); else if (k === 'playstyle') d.tags = v.split(',').map(dec);
-    else if (k === 'made by') info.by = dec(v); else if (k === 'character id') info.id = v; else if (k === 'patch') info.patch = dec(v); else if (k === 'name') d.name = dec(v);
+    else if (k === 'made by') info.by = dec(v); else if (k === 'character id') info.id = v; else if (k === 'based on version') { const n = parseInt(v.replace(/\D/g, ''), 10); if (n > 0) info.ver = n - 1; } else if (k === 'suggestion') info.kind = /edit/i.test(v) ? 'edit' : /new version/i.test(v) ? 'newver' : ''; else if (k === 'change note') info.note = dec(v); else if (k === 'patch') info.patch = dec(v); else if (k === 'name') d.name = dec(v);
     else if (k === 'pokemon') d.dex = dexFromLabel(v); else if (k === 'role') { const rs = v.split('/').map(x => findIn(ROLES.map(r => r[0]), x)).filter(Boolean); d.role = rs[0] || ''; d.role2 = rs[1] || ''; }
     else if (k === 'types') d.types = v.split(',').map(t => findIn(TYPES.map(x => x[0]), t)).filter(Boolean);
     else if (k === 'description') d.desc = dec(v); else if (k === 'lore') d.lore = dec(v);
@@ -945,6 +958,17 @@ async function saveText(name, text) {
   toast(`Downloaded ${name}.`);
 }
 const fileName = n => `character-${(txt(n) || 'design').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${new Date().toISOString().slice(0, 10)}.txt`;
+/* What a suggestion changes compared with a character version (moves matched by their Move ID). */
+const MOVE_FIELD = { slot: 'slot', sets: 'moveset', name: 'name', at: 'learned at', type: 'type', cat: 'category', dmg: 'damage', mr: 'max rank', cd: 'cooldown', cdr: 'cooldown per rank', cost: 'cost', res: 'paid with', range: 'range', shape: 'shape', size: 'size', fx: 'effects', desc: 'description' };
+function changeList(a, b) {
+  const out = [], same = (x, y) => JSON.stringify(x ?? '') === JSON.stringify(y ?? '');
+  for (const [k, l] of [['name', 'Name'], ['dex', 'Pokémon'], ['role', 'Role'], ['role2', 'Second role'], ['cls', 'Class'], ['types', 'Types'], ['status', 'Status'], ['tagline', 'Tagline'], ['tags', 'Playstyle tags'], ['desc', 'Description'], ['lore', 'Lore'], ['evo', 'Evolution line'], ['stats', 'Base stats'], ['notes', 'Note boxes']])
+    if (!same(a[k], b[k])) out.push(l);
+  const am = new Map(a.kit.map(m => [m.id, m])), bm = new Map(b.kit.map(m => [m.id, m]));
+  for (const m of b.kit) { const o = am.get(m.id); if (!o) { out.push(`New move: ${m.name || 'Unnamed'}`); continue; } const f = Object.keys(MOVE_FIELD).filter(k => !same(m[k], o[k])); if (f.length) out.push(`${o.name || m.name}: ${f.map(k => MOVE_FIELD[k]).join(', ')}`); }
+  for (const m of a.kit) if (!bm.has(m.id)) out.push(`Removed move: ${m.name || 'Unnamed'}`);
+  return out;
+}
 async function loadDesignFile(file) {
   if (!file) return;
   if (file.size > 400000) { toast('That file is too big to be a character design.'); return; }
@@ -952,7 +976,9 @@ async function loadDesignFile(file) {
   const { core, info } = parsed;
   const target = info.id && CHARS[info.id] ? info.id : (Object.entries(CHARS).find(([, c]) => c.name.toLowerCase() === core.name.toLowerCase())?.[0] || null);
   if ($('detail').open) $('detail').close();
-  openEditor({ mode: 'draft', id: null, d: core, by: info.by || '', target, asVersion: !!target, loaded: true, patch: info.patch });
+  const tc = target && CHARS[target], bv = tc ? (info.ver != null && info.ver < verList(tc).length ? info.ver : useIdx(tc)) : null;
+  const changes = tc ? changeList(cleanCore(verList(tc)[bv].d), core) : null;
+  openEditor({ mode: 'draft', id: null, d: core, by: info.by || '', target, baseVer: tc ? bv : null, kind: info.kind || (tc ? 'newver' : ''), note: info.note || '', changes, loaded: true, patch: info.patch });
   toast(`Loaded ${core.name || 'the design'}${info.by ? ' by ' + info.by : ''}. Check it, then ${STORE.editable ? 'save' : 'download'}.`);
 }
 
@@ -1037,7 +1063,7 @@ document.addEventListener('click', async e => {
   const c = CHARS[OPEN.id];
   if (a === 'edit' && c) { const v = OPEN.ver ?? useIdx(c); openEditor({ mode: 'edit', id: OPEN.id, ver: v, verCount: verList(c).length, d: cleanCore(verList(c)[v].d), by: verList(c)[v].by }); return; }
   if (a === 'newver' && c) { const v = OPEN.ver ?? useIdx(c); openEditor({ mode: 'newver', id: OPEN.id, ver: verList(c).length, d: cleanCore(verList(c)[v].d) }); return; }
-  if (a === 'designfrom' && c) { const v = OPEN.ver ?? useIdx(c); openEditor({ mode: 'draft', id: null, target: OPEN.id, d: cleanCore(verList(c)[v].d) }); return; }
+  if ((a === 'designfrom' || a === 'suggestedit') && c) { const v = OPEN.ver ?? useIdx(c); openEditor({ mode: 'draft', id: null, target: OPEN.id, baseVer: v, kind: a === 'suggestedit' ? 'edit' : 'newver', d: cleanCore(verList(c)[v].d) }); return; }
   if (a === 'usever' && c) { const vers = verList(c); await change(OPEN.id, buildDoc(vers, OPEN.ver, c), `V${OPEN.ver + 1} of ${c.name} is now in use.`); OPEN.ver = null; redrawDetail(); return; }
   if (a === 'delver' && c) { const vers = verList(c).slice(), use = useIdx(c), k = OPEN.ver; if (k === use) return; vers.splice(k, 1); await change(OPEN.id, buildDoc(vers, k < use ? use - 1 : use, c), `V${k + 1} of ${c.name} deleted.`); OPEN.ver = null; redrawDetail(); return; }
   if (a === 'delchar' && c) { if (!OPEN.confirmDel) { OPEN.confirmDel = true; redrawDetail(); setTimeout(() => { if (OPEN.confirmDel) { OPEN.confirmDel = false; if ($('detail').open && CHARS[OPEN.id]) redrawDetail(); } }, 4000); return; } const name = c.name; $('detail').close(); await change(OPEN.id, null, `${name} deleted.`); return; }
@@ -1047,7 +1073,7 @@ document.addEventListener('click', async e => {
   if (a === 'save') { saveEditor(); return; }
   if (a === 'fulledit') { readEditor(); const keep = { id: ED.id, ver: ED.ver, verCount: ED.verCount, d: ED.d, by: ED.by }; openEditor({ mode: 'edit', ...keep }); return; }
   if (a === 'newmove') return;
-  if (a === 'edtxt') { const core = editorCore(); if (!core.name) { $('edWarn').textContent = 'Give the character a name first.'; return; } UI.madeBy = txt(ED.by); saveUI(); saveText(fileName(core.name), designText(core, { by: ED.by, id: ED.id || ED.target || '', ver: ED.mode === 'edit' ? ED.ver : null, patch: ED.patch })); return; }
+  if (a === 'edtxt') { const core = editorCore(); if (!core.name) { $('edWarn').textContent = 'Give the character a name first.'; return; } UI.madeBy = txt(ED.by); saveUI(); saveText(fileName(core.name), designText(core, { by: ED.by, id: ED.id || ED.target || '', ver: ED.mode === 'edit' ? ED.ver : (ED.baseVer ?? null), kind: ED.kind || (ED.mode === 'edit' ? 'edit' : ''), note: ED.note, patch: ED.patch })); return; }
   if (a === 'addmove') { redrawEditorKeep(() => { const used = new Set(ED.d.kit.map(m => m.slot)); ED.d.kit.push(cleanMove({ slot: SLOTS.find(s => !used.has(s)) || 'Move 1' })); ED.openMove = ED.d.kit.length - 1; }); requestAnimationFrame(() => document.querySelector(`#eKit [data-move="${ED.d.kit.length - 1}"] [data-k=name]`)?.focus()); return; }
   if (a === 'addnote') { redrawEditorKeep(() => ED.d.notes.push({ title: '', text: '' })); return; }
   if (a === 'addevo') { redrawEditorKeep(() => ED.d.evo.push({ dex: '', name: '', at: '' })); return; }
