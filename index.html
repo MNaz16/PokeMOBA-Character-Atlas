@@ -1254,7 +1254,8 @@ function renderCalc(g) {
     ${g === 'poke' ? balChipsHTML() : (loadOpts ? `<label class="game-label" for="balLoad-${g}">${g === 'smite' ? 'Check a SMITE item (optional)' : 'Check one of your items (optional)'}</label><select id="balLoad-${g}" class="field" data-bal-f="load"><option value="">— start from scratch —</option>${loadOpts}</select>` : '')}
     <label class="game-label" for="balTier-${g}">Tier</label><select id="balTier-${g}" class="field" data-bal-f="tier">${Object.entries(BAL_TIERS).map(([k, t]) => `<option value="${k}" ${b.tier === k ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select>
     ${b.tier === 't3' ? `<label class="game-label" for="balEffect-${g}">Its effect</label><select id="balEffect-${g}" class="field" data-bal-f="effect">${Object.entries(BAL_EFFECTS).map(([k, e]) => `<option value="${k}" ${b.effect === k ? 'selected' : ''}>${esc(e.label)}</option>`).join('')}</select>
-     <label class="game-label" for="balRole-${g}">Item role</label><select id="balRole-${g}" class="field" data-bal-f="role"><option value="">Auto (${esc(BAL_ROLES[balAutoRole(b)].label)})</option>${Object.entries(BAL_ROLES).map(([k, r]) => `<option value="${k}" ${b.role === k ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select>` : ''}
+     ${balPassiveHTML(g)}
+     <label class="game-label" for="balRole-${g}">Item role</label><select id="balRole-${g}" class="field" data-bal-f="role"><option value="">Auto (${esc(BAL_ROLES[balAutoRole(b)].label)})</option>${Object.entries(BAL_ROLES).map(([k, r]) => `<option value="${k}" ${b.role === k ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select>` : balPassiveHTML(g)}
     <div class="game-label">Stats</div>
     ${statBoxesHTML(stats, Object.fromEntries(b.rows), 'data-bal-sv', b.adapt || null)}
     <label class="game-label" for="balIntFair-${g}">Intelligence price</label><select id="balIntFair-${g}" class="field" data-bal-f="intFair"><option value="0" ${!b.intFair ? 'selected' : ''}>SMITE price (26 gold per point)</option><option value="1" ${b.intFair ? 'selected' : ''}>Fair price (40 gold per point)</option></select>
@@ -1415,13 +1416,16 @@ $('pokeCompareDialog')?.addEventListener('click', e => { const dl = $('pokeCompa
 /* ---------- Send a build as a text file: anyone (shared copies too) downloads the item, its stats, the price and the
    closest SMITE 2 item, and sends the file to the owner to review. ---------- */
 function balItemName(g) { const b = BAL[g], it = b.build ? POKEBYID.get(b.build) : null; return it ? `${it.name} (${it.id})` : (b.tname || '').trim(); }
+/* Passive suggestion box: right under "Its effect" (or where it would be, for tiers without an effect). Goes into the build text file and the export. */
+function balPassiveHTML(g) {
+  return `<label class="game-label" for="balPassive-${g}">Passive suggestion (optional)</label><textarea id="balPassive-${g}" class="field pass-sug-box" rows="1" maxlength="4000" data-bal-passive placeholder="Write the passive you want for this item…">${esc(BAL[g].passive || '')}</textarea>`;
+}
 function balTextHTML(g) {
   const b = BAL[g], it = b.build ? POKEBYID.get(b.build) : null, has = balCompute(g).parts.length > 0 || !!String(b.passive || '').trim();
   return `<div class="bal-text"><div class="game-label">Send this build</div>
    <p class="small muted" style="margin:0 0 8px">Download a short text file with the item, its stats, the price, the closest SMITE 2 item and your passive idea, and send it for review.</p>
    <label class="game-label" for="balBy-${g}">Made by (optional)</label><input id="balBy-${g}" class="field" type="text" maxlength="40" data-bal-by value="${esc(b.by || '')}" placeholder="Your name">
    ${it ? '' : `<label class="game-label" for="balTName-${g}">Item name</label><input id="balTName-${g}" class="field" type="text" maxlength="80" data-bal-tname value="${esc(b.tname || '')}" placeholder="e.g. Kings Rock">`}
-   <label class="game-label" for="balPassive-${g}">Passive suggestion (optional)</label><textarea id="balPassive-${g}" class="field pass-sug-box" rows="1" maxlength="4000" data-bal-passive placeholder="Write the passive you want for this item…">${esc(b.passive || '')}</textarea>
    <button class="button primary" data-bal-text ${has ? '' : 'disabled'}>⬇ Download as text file</button>${has ? '' : '<span class="small muted" style="margin-left:8px">Add a stat or a passive first.</span>'}</div>`;
 }
 function balVerdictText(b, r) {
@@ -1475,7 +1479,7 @@ function balDownloadText(g) {
   const slug = (balItemName(g).replace(/\s*\(PK-\d+\)$/, '') || 'item').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'item';
   saveTextFile(`item-build-${slug}-${new Date().toISOString().slice(0, 10)}.txt`, balBuildText(g));
 }
-document.addEventListener('input', e => { const t = e.target; if (t.matches?.('[data-bal-passive]')) { const gp = t.closest('[data-bal]').dataset.bal; BAL[gp].passive = t.value; passGrow(t); const db = t.closest('.bal-text')?.querySelector('[data-bal-text]'); if (db) db.disabled = !(balCompute(gp).parts.length || t.value.trim()); const ex = t.closest('[data-bal]').querySelector('.bal-export'); if (ex) ex.outerHTML = balExportHTML(t.closest('[data-bal]').dataset.bal); return; } if (t.matches?.('[data-bal-by]')) { BAL[t.closest('[data-bal]').dataset.bal].by = t.value; return; } if (!t.matches?.('[data-bal-tname]')) return; BAL[t.closest('[data-bal]').dataset.bal].tname = t.value; });
+document.addEventListener('input', e => { const t = e.target; if (t.matches?.('[data-bal-passive]')) { const gp = t.closest('[data-bal]').dataset.bal; BAL[gp].passive = t.value; passGrow(t); const db = t.closest('[data-bal]')?.querySelector('[data-bal-text]'); if (db) db.disabled = !(balCompute(gp).parts.length || t.value.trim()); const ex = t.closest('[data-bal]').querySelector('.bal-export'); if (ex) ex.outerHTML = balExportHTML(t.closest('[data-bal]').dataset.bal); return; } if (t.matches?.('[data-bal-by]')) { BAL[t.closest('[data-bal]').dataset.bal].by = t.value; return; } if (!t.matches?.('[data-bal-tname]')) return; BAL[t.closest('[data-bal]').dataset.bal].tname = t.value; });
 document.addEventListener('click', e => { const b = e.target.closest?.('[data-bal-text]'); if (!b) return; balDownloadText(b.closest('[data-bal]').dataset.bal); });
 
 /* ---------- Load a build file: reads a "Send this build" text file back into the Calculator (button or drag & drop). ---------- */
